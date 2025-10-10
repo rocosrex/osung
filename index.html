@@ -278,6 +278,65 @@
                     
                     showSuccessState(`${name} 로드 완료`);
                     updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3716818) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+
+                        const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(3716818, {
+                        //This tileset doesn't have a location, so we're using a modelMatrix to place it at 0, 0 instead of drawing at the center of the earth
+                        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                        ),
+                    });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
                 } else if (assetId === 3001) {
                     // krri 로컬 타일셋 로드
                     try {
