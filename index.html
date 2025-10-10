@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cesium Asset Viewer</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+        }
+        
+        #toolbar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 1000;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #toolbar h3 {
+            margin: 0 0 15px 0;
+            color: #48b;
+            font-size: 18px;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .loading {
+            color: #ffa500;
+            animation: pulse 1.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { opacity: 0.6; }
+            to { opacity: 1; }
+        }
+        
+        .error {
+            color: #ff6b6b;
+        }
+        
+        .success {
+            color: #51cf66;
+        }
+        
+        .controls {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #666;
+        }
+        
+        .control-button {
+            margin: 5px 5px 5px 0;
+            padding: 6px 12px;
+            border: none;
+            background: #666;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .control-button:hover {
+            background: #777;
+        }
+        
+        .control-button.primary {
+            background: #48b;
+        }
+        
+        .control-button.primary:hover {
+            background: #369;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <div id="toolbar">
+        <h3>🌍 Cesium Asset Viewer</h3>
+        
+        <div class="controls">
+            <button class="control-button primary" onclick="loadAsset(3715158, 'Asset 3715158', 'Cesium Ion Asset')">🎯 Asset 3715158</button>
+            <button class="control-button primary" onclick="loadAsset(3716818, 'krri', 'krri 시험동')">🎯 krri 시험동</button>
+            <button class="control-button primary" onclick="loadAsset(0, 'local-krri', 'local-krri')">🎯 local-krri</button>
+            <button class="control-button primary" onclick="loadAsset(3001, 'osong_slope_test_1', 'osong_slope_test_1')">🎯 osong_slope_test_1</button>
+            <!-- <button class="control-button primary" onclick="loadAsset(3002, 'osong_slope_test_2', 'osong_slope_test_2')">🎯 osong_slope_test_2</button> -->
+            <button class="control-button primary" onclick="loadAsset(3011, 'osong_test_1', 'osong_test_1')">🎯 osong_test_1</button>
+            <button class="control-button primary" onclick="loadAsset(3012, 'osong_test_2', 'osong_test_2')">🎯 osong_test_2</button>
+            <button class="control-button primary" onclick="loadAsset(4001, '20251010_SpecialBuilding_AtoB_01', '20251010_SpecialBuilding_AtoB_01')">🎯 20251010_SpecialBuilding_AtoB_01</button>
+            <button class="control-button primary" onclick="loadAsset(4002, '20251010_SpecialBuilding_AtoB_02', '20251010_SpecialBuilding_AtoB_02')">🎯 20251010_SpecialBuilding_AtoB_02</button>
+            <button class="control-button primary" onclick="loadAsset(4003, '20251010_SpecialBuilding_BtoA_02', '20251010_SpecialBuilding_BtoA_02')">🎯 20251010_SpecialBuilding_BtoA_02</button>
+            <button class="control-button primary" onclick="resetView()">🏠 홈 뷰</button>
+            <button class="control-button" onclick="toggleInfo()">ℹ️ 정보 토글</button>
+            <button class="control-button" onclick="clearAssets()">🗑️ 모든 에셋 제거</button>
+        </div>
+    </div>
+
+    <div id="info">
+        <div><strong>현재 로드된 에셋:</strong></div>
+        <div id="assetInfo">에셋이 로드되지 않음</div>
+        <hr style="margin: 10px 0; border: 1px solid #666;">
+        <div><strong>카메라 정보:</strong></div>
+        <div id="cameraInfo">위치 정보 없음</div>
+    </div>
+
+    <script type="module">
+        // Cesium Ion 액세스 토큰 설정
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkZTdhM2IzOS0wNWU4LTQ2MmYtOTRhYy1mYWQwNmIxZWRhNmIiLCJpZCI6MzQwOTgwLCJpYXQiOjE3NTc3NjE5NzZ9.hpmUyQTrMDYE4WV4tdd83XOoP45nPscmeq7H1prcUIU';
+        
+        let viewer;
+        let currentAssets = [];
+        let infoVisible = true;
+        
+        async function initializeCesium() {
+            try {
+                // Grant CesiumJS access to your ion assets
+                viewer = new Cesium.Viewer('cesiumContainer', {
+                    terrainProvider: await Cesium.CesiumTerrainProvider.fromIonAssetId(1)
+                });
+                viewer.scene.globe.depthTestAgainstTerrain = true;
+                
+                initializeViewer();
+            } catch (error) {
+                console.error('Cesium 초기화 오류:', error);
+                // 기본 설정으로 폴백
+                viewer = new Cesium.Viewer('cesiumContainer', {
+                    terrainProvider: new Cesium.EllipsoidTerrainProvider()
+                });
+                initializeViewer();
+            }
+        }
+        
+        function initializeViewer() {
+            // 카메라 정보 업데이트
+            viewer.camera.changed.addEventListener(updateCameraInfo);
+            
+            // 초기 뷰 설정 (전 세계 뷰)
+            viewer.camera.setView({
+                destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000)
+            });
+            
+            updateCameraInfo();
+            
+            // Asset ID 3715158 자동 로드
+            loadInitialAsset();
+            
+            console.log('Cesium Asset Viewer가 준비되었습니다!');
+        }
+        
+        // 초기 에셋 로드 함수
+        async function loadInitialAsset() {
+            try {
+                showLoadingState('Asset 3715158 로딩 중...');
+                
+                const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(3715158);
+                viewer.scene.primitives.add(tileset);
+                await viewer.zoomTo(tileset);
+                
+                // Apply the default style if it exists
+                const extras = tileset.asset.extras;
+                if (
+                    Cesium.defined(extras) &&
+                    Cesium.defined(extras.ion) &&
+                    Cesium.defined(extras.ion.defaultStyle)
+                ) {
+                    tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                }
+                
+                currentAssets.push(tileset);
+                showSuccessState('Asset 3715158 로드 완료');
+                updateAssetInfo('Asset 3715158', 'Cesium Ion Asset', '3D Tileset');
+                
+            } catch (error) {
+                console.error('Asset 3715158 로드 오류:', error);
+                showErrorState(`Asset 3715158 로드 실패: ${error.message}`);
+            }
+        }
+        
+        // 에셋 로드 함수
+        window.loadAsset = async function(assetId, name, description) {
+            try {
+                showLoadingState(`${name} 로딩 중...`);
+                
+                let asset;
+                
+                // 에셋 타입에 따라 다른 방식으로 로드
+                if (assetId === 1) {
+                    // World Terrain
+                    asset = await Cesium.createWorldTerrainAsync();
+                    viewer.terrainProvider = asset;
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, 'Terrain');
+                } else if (assetId === 2) {
+                    // World Imagery
+                    asset = new Cesium.BingMapsImageryProvider({
+                        url: 'https://dev.virtualearth.net',
+                        key: 'Your-Bing-Maps-Key',
+                        mapStyle: Cesium.BingMapsStyle.AERIAL
+                    });
+                    viewer.imageryLayers.removeAll();
+                    viewer.imageryLayers.addImageryProvider(asset);
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, 'Imagery');
+                } else if (assetId === 1000) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/output_tileset/tileset_lod.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                        //  ["${POSITION}[2] < 5.0", "color('blue')"],
+                                        //  // 중간 높이는 녹색
+                                        //  ["${POSITION}[2] < 5.1", "color('green')"],
+                                        //  // 높은 부분은 노란색
+                                        //  ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                        //  // 더 높은 부분은 주황색
+                                        //  ["${POSITION}[2] < 5.3", "color('orange')"],
+                                         // 가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('red')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3001) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/osong_slope_test_1/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3002) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/osong_slope_test_2/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                         // 가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('red')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3011) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/osong_test_1/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3012) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/osong_test_2/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 4001) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/20251010_SpecialBuilding_AtoB_01/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 4002) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/20251010_SpecialBuilding_AtoB_02/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 4003) {
+                    // krri 로컬 타일셋 로드
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+                        
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/20251010_SpecialBuilding_BtoA_02/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras && extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras && extras.ion && extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                            // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 5.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 5.1", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 5.2", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.3", "color('orange')"],
+                                        //  가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('gray')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 0) {
+                    // krri 로컬 타일셋 로드
+                    // const tileset = await Cesium.Cesium3DTileset.fromUrl('http://localhost:8080/krri/tileset.json', {
+                    //     modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                    //     Cesium.Cartesian3.fromDegrees(0, 0),
+                    //     ),
+                    // });
+                    // viewer.scene.primitives.add(tileset);
+                    // await viewer.zoomTo(tileset);
+                    
+                    // currentAssets.push(tileset);
+                    // showSuccessState(`${name} 로드 완료`);
+                    // updateAssetInfo(name, description, '로컬 3D Tileset');
+                    try {
+                        viewer.scene.globe.depthTestAgainstTerrain = false;
+
+                        const tileset = await Cesium.Cesium3DTileset.fromUrl(`${window.location.protocol}//${window.location.host}/point_cloud/krri_test_bed/tileset.json`, {
+                            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                            Cesium.Cartesian3.fromDegrees(0, 0),
+                            ),
+                        });
+
+                        // const style = new Cesium.Cesium3DTilesetStyle({
+                        //         // color 속성에 대한 표현식을 정의합니다.
+                        //         color: {
+                        //             // conditions: 여러 개의 조건과 그에 따른 색상을 배열로 정의합니다.
+                        //             // 위에서부터 순서대로 조건을 확인하고, 처음 만족하는 조건의 색상을 적용합니다.
+                        //             conditions: [
+                        //             // intensity 값이 50 미만이면 파란색
+                        //             ["${intensity} < 50", "color('blue')"],
+                        //             // intensity 값이 100 미만이면 녹색
+                        //             ["${intensity} < 100", "color('green')"],
+                        //             // intensity 값이 150 미만이면 노란색
+                        //             ["${intensity} < 150", "color('yellow')"],
+                        //             // intensity 값이 200 미만이면 주황색
+                        //             ["${intensity} < 200", "color('orange')"],
+                        //             // 그 외 모든 경우(200 이상)는 빨간색
+                        //             ["true", "color('red')"]
+                        //             ]
+                        //         },
+                        //         // 점의 크기를 조절할 수도 있습니다.
+                        //         // pointSize: 5
+                        //         });
+                        // tileset.style = style;
+
+                        viewer.scene.primitives.add(tileset);
+                        await viewer.zoomTo(tileset);
+
+                        // 디버깅: intensity 값 확인
+                        // setTimeout(() => {
+                        //     console.log('=== 타일셋 디버깅 정보 ===');
+                        //     console.log('타일셋 로드 완료, intensity 값 확인 중...');
+                            
+                        //     // 타일셋의 통계 정보 출력
+                        //     console.log('Tileset statistics:');
+                        //     console.log('- Total points:', tileset.totalPoints);
+                        //     console.log('- Ready tiles:', tileset.ready);
+                        //     console.log('- Asset:', tileset.asset);
+                        //     console.log('- Properties:', tileset.properties);
+                            
+                        //     // 첫 번째 타일의 content 확인
+                        //     const rootTile = tileset.root;
+                        //     if (rootTile && rootTile.content) {
+                        //         const content = rootTile.content;
+                        //         console.log('Content type:', content.constructor.name);
+                        //         console.log('Content object:', content);
+                                
+                        //         // 모든 속성 확인
+                        //         console.log('Content properties:');
+                        //         for (let prop in content) {
+                        //             if (content.hasOwnProperty(prop)) {
+                        //                 console.log(`- ${prop}:`, typeof content[prop], content[prop]);
+                        //             }
+                        //         }
+                                
+                        //         // Point cloud content인 경우
+                        //         if (content instanceof Cesium.Cesium3DTilePointFeature) {
+                        //             console.log('Point feature found');
+                        //             console.log('Available properties:', content.getPropertyNames());
+                                    
+                        //             // intensity 속성이 있는지 확인
+                        //             if (content.hasProperty('intensity')) {
+                        //                 console.log('Intensity property exists');
+                        //                 // 몇 개의 intensity 값 샘플링
+                        //                 for (let i = 0; i < Math.min(10, content.pointsLength); i++) {
+                        //                     const intensity = content.getProperty('intensity', i);
+                        //                     console.log(`Point ${i}: intensity = ${intensity}`);
+                        //                 }
+                        //             } else {
+                        //                 console.log('Intensity property not found');
+                        //                 console.log('Available properties:', content.getPropertyNames());
+                        //             }
+                        //         } else if (content.pointCloudShading) {
+                        //             console.log('Point cloud shading available');
+                        //             console.log('Point cloud shading:', content.pointCloudShading);
+                        //         } else {
+                        //             // 다른 타입의 content인 경우
+                        //             console.log('Other content type detected');
+                        //             if (content.pointCloudShading) {
+                        //                 console.log('Point cloud shading:', content.pointCloudShading);
+                        //             }
+                        //             if (content.featuresLength) {
+                        //                 console.log('Features length:', content.featuresLength);
+                        //             }
+                        //             if (content.pointsLength) {
+                        //                 console.log('Points length:', content.pointsLength);
+                                        
+                        //                 // Draco 압축된 Point cloud 데이터에서 intensity 값 확인
+                        //                 console.log('Trying to access intensity values from Draco compressed data...');
+                                        
+                        //                 // Draco 압축 정보 확인
+                        //                 if (content._model && content._model._loader) {
+                        //                     const loader = content._model._loader;
+                        //                     console.log('Loader info:', loader);
+                                            
+                        //                     // Point cloud shading 정보 확인
+                        //                     if (loader.pointCloudShading) {
+                        //                         console.log('Point cloud shading:', loader.pointCloudShading);
+                        //                         console.log('Point cloud shading attributes:', loader.pointCloudShading.attributtes);
+                        //                     }
+                                            
+                        //                     // Draco 압축된 데이터에서 속성 확인
+                        //                     if (loader._dracoLoader) {
+                        //                         console.log('Draco loader found');
+                        //                         const dracoLoader = loader._dracoLoader;
+                        //                         console.log('Draco attributes:', dracoLoader.attributes);
+                        //                     }
+                        //                 }
+                                        
+                        //                 // 다른 방법으로 intensity 접근 시도
+                        //                 try {
+                        //                     // Cesium의 point cloud shading을 통해 intensity 확인
+                        //                     if (viewer.scene.primitives.length > 0) {
+                        //                         const primitive = viewer.scene.primitives.get(0);
+                        //                         if (primitive.pointCloudShading) {
+                        //                             console.log('Primitive point cloud shading:', primitive.pointCloudShading);
+                        //                         }
+                        //                     }
+                                            
+                        //                     // 타일셋의 속성 정보 확인
+                        //                     if (tileset.properties) {
+                        //                         console.log('Tileset properties:', tileset.properties);
+                        //                     }
+                                            
+                        //                     // Asset 정보에서 속성 확인
+                        //                     if (tileset.asset && tileset.asset.properties) {
+                        //                         console.log('Asset properties:', tileset.asset.properties);
+                        //                     }
+                                            
+                        //                 } catch (error) {
+                        //                     console.log('Error accessing intensity:', error);
+                        //                 }
+                                        
+                        //                 // 색상 기반 스타일링 시도 (intensity 대신 다른 방법)
+                        //                 console.log('Trying alternative styling methods...');
+                        //                 console.log('Since intensity is not accessible, we might need to use height-based or position-based coloring');
+                        //             }
+                        //         }
+                        //     }
+                            
+                        //     console.log('=== 디버깅 정보 끝 ===');
+                        // }, 3000); // 3초 후에 실행하여 타일셋이 완전히 로드되도록 함
+
+                        // Apply the default style if it exists
+                        const extras = tileset.asset.extras;
+                        console.log('Cesium.defined(extras):', Cesium.defined(extras));
+                        console.log('Cesium.defined(extras.ion):', Cesium.defined(extras.ion));
+                        console.log('Cesium.defined(extras.ion.defaultStyle):', Cesium.defined(extras.ion.defaultStyle));
+                        if (
+                            Cesium.defined(extras) &&
+                            Cesium.defined(extras.ion) &&
+                            Cesium.defined(extras.ion.defaultStyle)
+                        ) {
+                            tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                        }
+                         else{
+                             // intensity가 접근 불가능하므로 높이 기반 색상 스타일링 사용
+                             const style = new Cesium.Cesium3DTileStyle({
+                                 // 높이 기반 색상 스타일링
+                                 color: {
+                                     conditions: [
+                                         // 높이가 낮은 부분은 파란색 (바닥)
+                                         ["${POSITION}[2] < 2.0", "color('blue')"],
+                                         // 중간 높이는 녹색
+                                         ["${POSITION}[2] < 3.0", "color('green')"],
+                                         // 높은 부분은 노란색
+                                         ["${POSITION}[2] < 4.0", "color('yellow')"],
+                                         // 더 높은 부분은 주황색
+                                         ["${POSITION}[2] < 5.0", "color('orange')"],
+                                         // 가장 높은 부분은 빨간색 (천장)
+                                         ["true", "color('red')"]
+                                     ]
+                                 },
+                                 // 점의 크기를 조절
+                                 pointSize: 2
+                             });
+                             tileset.style = style;
+                             
+                             console.log('Applied height-based coloring style');
+                         }
+                        currentAssets.push(tileset);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '로컬 3D Tileset');
+                } else if (assetId === 3716416) {
+                    try {
+                    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(3716416, {
+                        //This tileset doesn't have a location, so we're using a modelMatrix to place it at 0, 0 instead of drawing at the center of the earth
+                        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+                        Cesium.Cartesian3.fromDegrees(0, 0),
+                        ),
+                    });
+                    viewer.scene.primitives.add(tileset);
+                    await viewer.zoomTo(tileset);
+
+                    // Apply the default style if it exists
+                    const extras = tileset.asset.extras;
+                    if (
+                        Cesium.defined(extras) &&
+                        Cesium.defined(extras.ion) &&
+                        Cesium.defined(extras.ion.defaultStyle)
+                    ) {
+                        tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                    }
+                    } catch (error) {
+                        console.log(error);
+                    }
+                } else {
+                    // 3D Tileset 또는 기타 에셋 (Cesium Ion)
+                    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(assetId);
+                    viewer.scene.primitives.add(tileset);
+                    await viewer.zoomTo(tileset);
+                    
+                    // Apply the default style if it exists
+                    const extras = tileset.asset.extras;
+                    if (
+                        Cesium.defined(extras) &&
+                        Cesium.defined(extras.ion) &&
+                        Cesium.defined(extras.ion.defaultStyle)
+                    ) {
+                        tileset.style = new Cesium.Cesium3DTileStyle(extras.ion.defaultStyle);
+                    }
+                    
+                    currentAssets.push(tileset);
+                    showSuccessState(`${name} 로드 완료`);
+                    updateAssetInfo(name, description, '3D Tileset');
+                }
+                
+            } catch (error) {
+                console.error(`${name} 생성 오류:`, error);
+                showErrorState(`${name} 생성 실패: ${error.message}`);
+            }
+        };
+        
+        // 뷰 리셋
+        window.resetView = function() {
+            // viewer.camera.setView({
+            //     destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000)
+            // });
+            // 서울의 중심 좌표로 카메라 뷰를 설정합니다.
+            viewer.camera.setView({
+                destination: Cesium.Cartesian3.fromDegrees(126.9780, 37.5665, 20000)
+            });
+
+            updateCameraInfo();
+        };
+        
+        // 모든 에셋 제거
+        window.clearAssets = function() {
+            currentAssets.forEach(asset => {
+                viewer.scene.primitives.remove(asset);
+            });
+            currentAssets = [];
+            updateAssetInfo('에셋이 로드되지 않음', '', '');
+        };
+        
+        // 정보 패널 토글
+        window.toggleInfo = function() {
+            const infoPanel = document.getElementById('info');
+            infoVisible = !infoVisible;
+            infoPanel.style.display = infoVisible ? 'block' : 'none';
+        };
+        
+        // 에셋 정보 업데이트
+        function updateAssetInfo(name, description, type) {
+            document.getElementById('assetInfo').innerHTML = 
+                `<strong>${name}</strong><br>${description}<br><em>타입: ${type}</em>`;
+        }
+        
+        // 카메라 정보 업데이트
+        function updateCameraInfo() {
+            const camera = viewer.camera;
+            const position = camera.positionCartographic;
+            const longitude = Cesium.Math.toDegrees(position.longitude).toFixed(4);
+            const latitude = Cesium.Math.toDegrees(position.latitude).toFixed(4);
+            const height = position.height.toFixed(0);
+            
+            document.getElementById('cameraInfo').innerHTML = 
+                `경도: ${longitude}°<br>위도: ${latitude}°<br>고도: ${height}m`;
+        }
+        
+        // 상태 표시 함수들
+        function showLoadingState(message) {
+            document.getElementById('assetInfo').innerHTML = 
+                `<span class="loading">⏳ ${message}</span>`;
+        }
+        
+        function showErrorState(message) {
+            document.getElementById('assetInfo').innerHTML = 
+                `<span class="error">❌ ${message}</span>`;
+        }
+        
+        function showSuccessState(message) {
+            document.getElementById('assetInfo').innerHTML = 
+                `<span class="success">✓ ${message}</span>`;
+        }
+        
+        // Cesium 초기화 실행
+        initializeCesium();
+    </script>
+</body>
+</html>
