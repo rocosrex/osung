@@ -100,7 +100,7 @@
         <div class="controls">
             <button class="control-button primary" onclick="loadAsset(3715158, 'Asset 3715158', 'Cesium Ion Asset')">🎯 Asset 3715158</button>
             <button class="control-button primary" onclick="loadAsset(3716818, 'krri', 'krri 시험동')">🎯 krri 시험동</button>
-            <button class="control-button primary" onclick="loadAsset(3771108, 'osong_test_1', 'osong_test_1')">🎯 오성 시험</button>
+            <button class="control-button primary" onclick="loadAsset(3771132, 'osong_test_1', 'osong_test_1')">🎯 오성 시험</button>
             <button class="control-button primary" onclick="loadAsset(3771046, 'osong_slope_test_1', 'osong_slope_test_1')">🎯 오성 경사 시험</button>
             <!-- <button class="control-button primary" onclick="loadAsset(3002, 'osong_slope_test_2', 'osong_slope_test_2')">🎯 osong_slope_test_2</button> -->
             <!-- <button class="control-button primary" onclick="loadAsset(3012, 'osong_test_2', 'osong_test_2')">🎯 osong_test_2</button> -->
@@ -277,7 +277,7 @@
                     
                     showSuccessState(`${name} 로드 완료`);
                     updateAssetInfo(name, description, '로컬 3D Tileset');
-                } else if (assetId === 3716818 || assetId === 3771108 || assetId === 3771046) {
+                } else if (assetId === 3716818 || assetId === 3771132 || assetId === 3771046) {
                     // krri 로컬 타일셋 로드
                     try {
                         viewer.scene.globe.depthTestAgainstTerrain = false;
